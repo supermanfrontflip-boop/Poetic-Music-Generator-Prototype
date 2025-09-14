@@ -42,11 +42,17 @@ async def generate_song(poem: PoemRequest, file: UploadFile = File(None)):
         lyrics = lyr.json()["lyrics"]
 
         # 4. Melody generation
-        mel = await client.post(f"{MELODY_URL}/generate/melody", json={"mood": poem.mood, "length": 16})
+        mel = await client.post(
+            f"{MELODY_URL}/generate/melody",
+            json={"mood": poem.mood, "length": 16}
+        )
         midi_path = mel.json()["midi_path"]
 
         # 5. Audio rendering
-        aud = await client.post(f"{AUDIO_URL}/render/audio", json={"midi_path": midi_path, "lyrics": lyrics})
+        aud = await client.post(
+            f"{AUDIO_URL}/render/audio",
+            json={"midi_path": midi_path, "lyrics": lyrics}
+        )
         audio_path = aud.json()["audio_path"]
 
         return {
@@ -57,13 +63,24 @@ async def generate_song(poem: PoemRequest, file: UploadFile = File(None)):
             "audio": audio_path
         }
 
-# 🎧 New Endpoint: stream the audio file
+# 🎧 Stream audio directly
 @app.get("/stream-audio")
 async def stream_audio(path: str):
-    """
-    Returns the generated .wav file so clients can play it directly.
-    Example: GET /stream-audio?path=/tmp/output.wav
-    """
     if not os.path.exists(path):
         return {"error": "Audio file not found"}
     return FileResponse(path, media_type="audio/wav", filename="song.wav")
+
+# 🚀 NEW: Play full pipeline and return WAV immediately
+@app.post("/play")
+async def play_song(poem: PoemRequest, file: UploadFile = File(None)):
+    async with httpx.AsyncClient() as client:
+        # Reuse /generate endpoint logic
+        resp = await generate_song(poem, file)
+        data = resp  # already dict
+
+        audio_path = data["audio"]
+        if not os.path.exists(audio_path):
+            return {"error": "Generated audio not found"}
+
+        # Stream the final song
+        return FileResponse(audio_path, media_type="audio/wav", filename="song.wav")
