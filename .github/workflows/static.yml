@@ -1,0 +1,4 @@
+curl -X POST http://localhost:8000/play \
+  -H "Content-Type: application/json" \
+  -d '{"text":"the ocean whispers to the moon","mood":"dreamy"}' \
+  --output song.wav
