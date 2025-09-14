@@ -4,7 +4,8 @@ import httpx
 import os
 
 app = FastAPI(title="Poetry-to-Music API Gateway")
-
+docker-compose build
+docker-compose up
 TEXT_PRE_URL = os.getenv("TEXT_PRE_URL", "http://text_preprocessing:8000")
 IMAGE_ANALYSIS_URL = os.getenv("IMAGE_ANALYSIS_URL", "http://image_analysis:8000")
 LYRICS_URL = os.getenv("LYRICS_URL", "http://lyrics_generation:8000")
