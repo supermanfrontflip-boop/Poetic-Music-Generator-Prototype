@@ -2,10 +2,10 @@ from fastapi import FastAPI, UploadFile, File
 from pydantic import BaseModel
 import httpx
 import os
+from fastapi.responses import FileResponse
 
 app = FastAPI(title="Poetry-to-Music API Gateway")
-docker-compose build
-docker-compose up
+
 TEXT_PRE_URL = os.getenv("TEXT_PRE_URL", "http://text_preprocessing:8000")
 IMAGE_ANALYSIS_URL = os.getenv("IMAGE_ANALYSIS_URL", "http://image_analysis:8000")
 LYRICS_URL = os.getenv("LYRICS_URL", "http://lyrics_generation:8000")
@@ -26,7 +26,10 @@ async def generate_song(poem: PoemRequest, file: UploadFile = File(None)):
         # 2. Image analysis (optional)
         captions = []
         if file:
-            img_resp = await client.post(f"{IMAGE_ANALYSIS_URL}/analyze/image", files={"file": (file.filename, await file.read())})
+            img_resp = await client.post(
+                f"{IMAGE_ANALYSIS_URL}/analyze/image",
+                files={"file": (file.filename, await file.read())}
+            )
             captions = img_resp.json().get("captions", [])
 
         # 3. Lyrics generation
@@ -53,3 +56,14 @@ async def generate_song(poem: PoemRequest, file: UploadFile = File(None)):
             "midi": midi_path,
             "audio": audio_path
         }
+
+# 🎧 New Endpoint: stream the audio file
+@app.get("/stream-audio")
+async def stream_audio(path: str):
+    """
+    Returns the generated .wav file so clients can play it directly.
+    Example: GET /stream-audio?path=/tmp/output.wav
+    """
+    if not os.path.exists(path):
+        return {"error": "Audio file not found"}
+    return FileResponse(path, media_type="audio/wav", filename="song.wav")
