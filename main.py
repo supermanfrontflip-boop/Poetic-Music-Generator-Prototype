@@ -4,7 +4,8 @@ import requests, uuid, os, logging, time
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="API Gateway")
-
+docker-compose build
+docker-compose up
 TEXT_PREP = os.getenv("TEXT_PREP_URL", "http://text_preprocessing:8000")
 IMAGE_ANALYSIS = os.getenv("IMAGE_ANALYSIS_URL", "http://image_analysis:8000")
 LYRICS = os.getenv("LYRICS_URL", "http://lyrics_generation:8000")
