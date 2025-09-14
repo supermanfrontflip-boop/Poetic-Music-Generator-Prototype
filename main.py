@@ -29,51 +29,127 @@ def orchestrate_job(job_id: str, payload: dict):
     logging.info(f"Job {job_id} started")
     start = time.time()
     # 1. text preprocessing
-    try:
-        r = requests.post(f"{TEXT_PREP}/preprocess/text", json={"poem": payload["poem"]}, timeout=20)
-        r.raise_for_status()
-        text_meta = r.json()
-    except Exception as e:
-        text_meta = {"error": str(e)}
-        logging.exception("Text preprocessing failed")
+    from fastapi import FastAPI
+from pydantic import BaseModel
+from transformers import pipeline
+
+app = FastAPI(title="Text Preprocessing Service")
+
+# Load Hugging Face sentiment + keyword pipeline
+sentiment_analyzer = pipeline("sentiment-analysis")
+summarizer = pipeline("summarization")
+
+class TextRequest(BaseModel):
+    text: str
+
+@app.post("/preprocess/text")
+async def preprocess_text(req: TextRequest):
+    sentiment = sentiment_analyzer(req.text[:512])[0]
+    summary = summarizer(req.text[:512], max_length=60, min_length=20, do_sample=False)[0]["summary_text"]
+
+    return {
+        "tokens": req.text.split(),
+        "sentiment": sentiment,
+        "summary": summary
+    }
 
     # 2. image analysis (optional)
-    image_embeddings = []
-    if payload.get("images"):
-        for img_uri in payload["images"]:
-            try:
-                r = requests.post(f"{IMAGE_ANALYSIS}/analyze/image", json={"uri": img_uri}, timeout=20)
-                r.raise_for_status()
-                image_embeddings.append(r.json())
-            except Exception:
-                logging.exception("Image analysis failed for %s", img_uri)
+    from fastapi import FastAPI, UploadFile, File
+from transformers import pipeline
+from PIL import Image
+
+app = FastAPI(title="Image Analysis Service")
+
+# Hugging Face image-to-text model
+captioner = pipeline("image-to-text", model="nlpconnect/vit-gpt2-image-captioning")
+
+@app.post("/analyze/image")
+async def analyze_image(file: UploadFile = File(...)):
+    image = Image.open(file.file)
+    captions = captioner(image)
+
+    return {
+        "captions": [c["generated_text"] for c in captions]
+    }
 
     # 3. lyrics generation
-    try:
-        r = requests.post(f"{LYRICS}/generate/lyrics", json={"poem": payload["poem"], "style": payload.get("style")}, timeout=30)
-        r.raise_for_status()
-        lyrics = r.json()
-    except Exception as e:
-        lyrics = {"error": str(e)}
-        logging.exception("Lyrics generation failed")
+    from fastapi import FastAPI
+from pydantic import BaseModel
+from transformers import pipeline
+
+app = FastAPI(title="Lyrics Generation Service")
+
+# Hugging Face GPT-2 fine-tuned for lyrics/poetry
+generator = pipeline("text-generation", model="gpt-2")
+
+class LyricsRequest(BaseModel):
+    theme: str
+    mood: str
+    length: int = 100
+
+@app.post("/generate/lyrics")
+async def generate_lyrics(req: LyricsRequest):
+    prompt = f"Write a {req.mood} song about {req.theme}:"
+    lyrics = generator(prompt, max_length=req.length, num_return_sequences=1, do_sample=True)[0]["generated_text"]
+
+    return {"lyrics": lyrics}
 
     # 4. melody/harmony generation
-    try:
-        r = requests.post(f"{MELODY}/generate/melody", json={"lyrics": lyrics.get("verses") or [], "embedding": text_meta.get("embedding")}, timeout=60)
-        r.raise_for_status()
-        melody = r.json()
-    except Exception as e:
-        melody = {"error": str(e)}
-        logging.exception("Melody generation failed")
+    from fastapi import FastAPI
+from pydantic import BaseModel
+import pretty_midi
+import random
+
+app = FastAPI(title="Melody & Harmony Service")
+
+class MelodyRequest(BaseModel):
+    mood: str
+    length: int = 16  # measures
+
+@app.post("/generate/melody")
+async def generate_melody(req: MelodyRequest):
+    midi = pretty_midi.PrettyMIDI()
+    piano = pretty_midi.Instrument(program=0)
+
+    # Simple scale mapping
+    scale = [60, 62, 64, 65, 67, 69, 71, 72]  # C major
+
+    for i in range(req.length):
+        note = random.choice(scale)
+        note_obj = pretty_midi.Note(
+            velocity=100,
+            pitch=note,
+            start=i * 0.5,
+            end=(i + 1) * 0.5
+        )
+        piano.notes.append(note_obj)
+
+    midi.instruments.append(piano)
+    midi_path = "/tmp/melody.mid"
+    midi.write(midi_path)
+
+    return {"midi_path": midi_path}
 
     # 5. audio rendering
-    try:
-        r = requests.post(f"{RENDER}/render/audio", json={"lyrics": lyrics, "midi_url": melody.get("midi_url"), "style": payload.get("style")}, timeout=120)
-        r.raise_for_status()
-        audio = r.json()
-    except Exception as e:
-        audio = {"error": str(e)}
-        logging.exception("Audio rendering failed")
+    from fastapi import FastAPI
+from pydantic import BaseModel
+import subprocess
+
+app = FastAPI(title="Audio Rendering Service")
+
+class RenderRequest(BaseModel):
+    midi_path: str
+    lyrics: str = ""
+
+@app.post("/render/audio")
+async def render_audio(req: RenderRequest):
+    # FluidSynth must be installed in container
+    output_path = "/tmp/output.wav"
+    subprocess.run([
+        "fluidsynth", "-ni", "example.sf2", req.midi_path, "-F", output_path, "-r", "44100"
+    ])
+
+    return {"audio_path": output_path}
 
     # 6. save metadata/history
     try:
