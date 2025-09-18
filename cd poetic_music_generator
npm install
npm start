@@ -1,0 +1,3 @@
+cd poetic_music_generator
+npm install
+npm start
