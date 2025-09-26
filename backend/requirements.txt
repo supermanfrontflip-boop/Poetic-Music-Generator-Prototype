@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+pydantic
+sqlalchemy
+alembic
+python-multipart
+celery[redis]
+redis
+boto3
+aioboto3
+python-dotenv
+aiofiles
+requests
+typing-extensions
