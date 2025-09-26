@@ -1,0 +1,64 @@
+# app.py
+import os, uuid
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from pydantic import BaseModel
+from dotenv import load_dotenv
+from db import init_db, SessionLocal, Job, Song
+from tasks import generate_job, celery
+from sqlalchemy.orm import sessionmaker
+from db import engine
+
+load_dotenv()
+init_db()
+
+app = FastAPI(title="Poetic Music Generator")
+
+class GenerateRequest(BaseModel):
+    poemTitle: str = None
+    poemText: str
+    mood: str = None
+    styleExamples: list = None
+    referenceAudioUrl: str = None
+    imageUrl: str = None
+
+@app.post("/generate")
+def generate(req: GenerateRequest):
+    job_id = str(uuid.uuid4())
+    session = SessionLocal()
+    # Create job row
+    job = Job(id=job_id, status="queued", input=req.dict(), message=None)
+    session.add(job)
+    session.commit()
+    session.close()
+    # Enqueue celery job
+    generate_job.delay(job_id, req.dict())
+    return {"jobId": job_id, "status": "queued"}
+
+@app.get("/status/{job_id}")
+def status(job_id: str):
+    session = SessionLocal()
+    job = session.query(Job).filter(Job.id == job_id).first()
+    session.close()
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    return {"jobId": job.id, "status": job.status, "message": job.message}
+
+@app.get("/song/{song_id}")
+def get_song(song_id: str):
+    session = SessionLocal()
+    song = session.query(Song).filter(Song.id == song_id).first()
+    session.close()
+    if not song:
+        raise HTTPException(status_code=404, detail="song not found")
+    return {
+        "id": song.id,
+        "job_id": song.job_id,
+        "title": song.title,
+        "poemTitle": song.poem_title,
+        "poemText": song.poem_text,
+        "lyrics": song.lyrics,
+        "audioUrl": song.audio_url,
+        "midiUrl": song.midi_url,
+        "imageUrl": song.image_url,
+        "metadata": song.metadata
+    }
