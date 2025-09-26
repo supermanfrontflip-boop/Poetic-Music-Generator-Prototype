@@ -1,0 +1,14 @@
+backend/
+├─ app.py
+├─ db.py
+├─ models.py
+├─ tasks.py
+├─ lyrics_model.py
+├─ music_model.py
+├─ storage.py
+├─ celeryconfig.py
+├─ requirements.txt
+├─ Dockerfile
+├─ docker-compose.yml
+├─ .env.example
+└─ README.md
